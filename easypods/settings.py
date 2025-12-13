@@ -28,13 +28,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-1)*vs12*-9(m8tctj2-8&r@l4om_#cs(f0ass=p^a63a&!*7b('
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
-ALLOWED_HOSTS = [ "localhost", "127.0.0.1", ".vercel.app"]
+ALLOWED_HOSTS = ['*']
 
-CSRF_TRUSTED_ORIGINS = ["https://*.vercel.app"]
-
-SECRET_KEY = os.environ.get("SECRET_KEY")
 
 # Application definition
 
@@ -143,8 +140,6 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / "staticfiles"
-
 MEDIA_URL= '/media/'
 MEDIA_ROOT=os.path.join(BASE_DIR,'media')
 
