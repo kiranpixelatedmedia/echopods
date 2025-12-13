@@ -1,0 +1,37 @@
+from .import views
+from django.urls import path
+
+urlpatterns = [
+ path('', views.landing, name='landing'), 
+path('signup', views.signup, name='signup'), 
+path('signup_fun', views.signup_fun, name='signup_fun'), 
+path('signin', views.signin, name='signin'), 
+path('login_fun', views.login_fun, name='login_fun'), 
+path('admin_home', views.admin_home, name='admin_home'), 
+path('user_home', views.user_home, name='user_home'), 
+path('logout_fun', views.logout_fun, name='logout_fun'), 
+path('add_brand/', views.add_brand, name='add_brand'),
+path('add_product/', views.add_product, name='add_product'),
+path('show_brands/', views.show_brands, name='show_brands'),
+path('edit_brand/<int:id>/', views.edit_brand, name='edit_brand'),
+path('delete_brand/<int:id>/', views.delete_brand, name='delete_brand'),
+path('show_products/', views.show_products, name='show_products'),
+path('edit_product/<int:id>/', views.edit_product, name='edit_product'),
+path('delete_product/<int:id>/', views.delete_product, name='delete_product'),
+path('approval_page/', views.approval_page, name='approval_page'),
+path('approve_user/<int:id>/', views.approve_user, name='approve_user'),
+path('disapprove_user/<int:id>/', views.disapprove_user, name='disapprove_user'),
+path('view_users/', views.view_users, name='view_users'),
+path('delete_user/<int:id>/', views.delete_user, name='delete_user'),
+path('brand/<int:brand_id>/', views.brand_products, name='brand_products'),
+path('add_to_cart/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
+path('view_cart/', views.view_cart, name='view_cart'),
+path('remove_cart_item/<int:item_id>/', views.remove_cart_item, name='remove_cart_item'),
+path('edit_profile/<int:id>/', views.edit_profile, name='edit_profile'),
+path('checkout_order/', views.checkout_order, name='checkout_order'),
+path('view_cart/', views.view_cart, name='view_cart'),
+path('update_cart_quantity/', views.update_cart_quantity, name='update_cart_quantity'),
+path('my_orders/', views.my_orders, name='my_orders'),
+path('cancel_order_item/<int:item_id>/', views.cancel_order_item, name='cancel_order_item'),
+
+]

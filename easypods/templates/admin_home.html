@@ -1,0 +1,187 @@
+{% extends 'admin_base.html' %}
+{% block title %}Admin Dashboard | EchoPods{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ===== DASHBOARD ===== */
+  .dashboard {
+    padding: 120px 5% 60px;
+  }
+
+  .dashboard h2 {
+    color: #38bdf8;
+    font-weight: 700;
+    text-shadow: 0 0 15px rgba(56,189,248,0.5);
+    margin-bottom: 60px;
+    letter-spacing: 1px;
+  }
+
+  /* ===== CARDS ===== */
+  .card {
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid rgba(56,189,248,0.3);
+    border-radius: 20px;
+    box-shadow: 0 0 25px rgba(56,189,248,0.15);
+    backdrop-filter: blur(10px);
+    transition: all 0.4s ease;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: -80%;
+    left: -80%;
+    width: 260%;
+    height: 260%;
+    background: radial-gradient(circle, rgba(56,189,248,0.15) 0%, transparent 70%);
+    transition: 0.8s;
+    opacity: 0;
+    z-index: 0;
+  }
+
+  .card:hover::before {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+
+  .card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 0 40px rgba(56,189,248,0.25);
+  }
+
+  .card-body {
+    position: relative;
+    z-index: 1;
+  }
+
+  .card-title {
+    color: #38bdf8;
+    font-weight: 600;
+    font-size: 1.3rem;
+    text-shadow: 0 0 10px rgba(56,189,248,0.3);
+  }
+
+  .card-text {
+    color: #cbd5e1;
+    font-size: 0.95rem;
+    margin: 12px 0 25px;
+  }
+
+  .btn-outline-info {
+    border-color: #38bdf8;
+    color: #38bdf8;
+    font-weight: 600;
+    border-radius: 50px;
+    padding: 10px 20px;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 15px rgba(56,189,248,0.15);
+  }
+
+  .btn-outline-info:hover {
+    background: linear-gradient(90deg, #06b6d4, #3b82f6);
+    color: white;
+    box-shadow: 0 0 25px rgba(56,189,248,0.4);
+    transform: scale(1.05);
+  }
+
+  /* ===== BADGE ===== */
+  .badge.bg-warning {
+    font-size: 0.8rem;
+    box-shadow: 0 0 10px rgba(250,204,21,0.4);
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 768px) {
+    .dashboard h2 {
+      font-size: 1.8rem;
+    }
+    .card {
+      border-radius: 15px;
+      size:10vh;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="dashboard container">
+  <h2 class="text-center mb-5">Admin Dashboard</h2>
+
+  <div class="row g-4 justify-content-center">
+
+    <!-- Add Brand -->
+    <div class="col-md-5 col-lg-4" data-aos="fade-up">
+      <div class="card text-center p-4">
+        <div class="card-body">
+          <h5 class="card-title">Add Brand</h5>
+          <p class="card-text">Add new brands to your product catalog easily.</p>
+          <a href="{% url 'add_brand' %}" class="btn btn-outline-info">Go to Add Brand</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Products -->
+    <div class="col-md-5 col-lg-4" data-aos="fade-up" data-aos-delay="100">
+      <div class="card text-center p-4">
+        <div class="card-body">
+          <h5 class="card-title">Add Product</h5>
+          <p class="card-text">Add products linked to their respective brands.</p>
+          <a href="{% url 'add_product' %}" class="btn btn-outline-info">Go to Add Product</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Approvals -->
+    <div class="col-md-5 col-lg-4" data-aos="fade-up" data-aos-delay="200">
+      <div class="card text-center p-4">
+        <div class="card-body">
+          <h5 class="card-title d-flex justify-content-center align-items-center gap-2">
+            User Approvals
+            {% if pending_count > 0 %}
+              <span class="badge bg-warning text-dark">{{ pending_count }}</span>
+            {% endif %}
+          </h5>
+          <p class="card-text">Approve or disapprove user accounts.</p>
+          <a href="{% url 'approval_page' %}" class="btn btn-outline-info">Manage Approvals</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- View Users -->
+    <div class="col-md-5 col-lg-4" data-aos="fade-up" data-aos-delay="300">
+      <div class="card text-center p-4">
+        <div class="card-body">
+          <h5 class="card-title">View Users</h5>
+          <p class="card-text">Check all registered users and their details.</p>
+          <a href="{% url 'view_users' %}" class="btn btn-outline-info">View Users</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manage Brands -->
+    <div class="col-md-5 col-lg-4" data-aos="fade-up" data-aos-delay="400">
+      <div class="card text-center p-4">
+        <div class="card-body">
+          <h5 class="card-title">Manage Brands</h5>
+          <p class="card-text">Edit or delete existing brands.</p>
+          <a href="{% url 'show_brands' %}" class="btn btn-outline-info">Manage Brands</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manage Products -->
+    <div class="col-md-5 col-lg-4" data-aos="fade-up" data-aos-delay="500">
+      <div class="card text-center p-4">
+        <div class="card-body">
+          <h5 class="card-title">Manage Products</h5>
+          <p class="card-text">Edit or delete products from your catalog.</p>
+          <a href="{% url 'show_products' %}" class="btn btn-outline-info">Manage Products</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+{% endblock %}

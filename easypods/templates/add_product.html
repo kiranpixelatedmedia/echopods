@@ -1,0 +1,187 @@
+{% extends 'admin_base.html' %}
+{% block title %}Add Product | EchoPods Admin{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ===== PRODUCT CARD ===== */
+  .product-card {
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid rgba(56,189,248,0.4);
+    border-radius: 20px;
+    padding: 40px;
+    width: 100%;
+    max-width: 560px;
+    margin: 110px auto 70px;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(56,189,248,0.15);
+    backdrop-filter: blur(10px);
+    animation: fadeIn 0.8s ease;
+    transition: all 0.3s ease;
+  }
+
+  .product-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0 45px rgba(56,189,248,0.25);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  h3 {
+    color: #38bdf8;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    text-shadow: 0 0 10px rgba(56,189,248,0.4);
+  }
+
+  /* ===== INPUTS ===== */
+  .form-control,
+  .form-select {
+    background: rgba(241, 245, 249, 0.95);
+    border: 1px solid rgba(56,189,248,0.4);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: #0f172a;
+    font-weight: 500;
+    transition: all 0.3s ease;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 15px rgba(56,189,248,0.3);
+  }
+
+  label.form-label {
+    font-weight: 500;
+    color: #e2e8f0;
+  }
+
+  /* ===== BUTTON ===== */
+  .btn-main {
+    background: linear-gradient(90deg, #06b6d4, #3b82f6);
+    border: none;
+    padding: 12px 36px;
+    color: white;
+    font-weight: 600;
+    border-radius: 50px;
+    transition: all 0.3s ease;
+    width: 100%;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-main:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 25px rgba(56,189,248,0.4);
+  }
+
+  /* ===== PREVIEW IMAGE ===== */
+  .preview {
+    text-align: center;
+    margin-top: 15px;
+  }
+
+  .preview img {
+    width: 150px;
+    height: 150px;
+    object-fit: cover;
+    border-radius: 15px;
+    border: 1px solid rgba(56,189,248,0.4);
+    box-shadow: 0 0 20px rgba(56,189,248,0.3);
+    transition: 0.3s;
+  }
+
+  .preview img:hover {
+    transform: scale(1.05);
+  }
+
+  /* ===== ALERT ===== */
+  .alert {
+    background: rgba(56,189,248,0.15);
+    border-color: rgba(56,189,248,0.3);
+    color: #e2e8f0;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 0 15px rgba(56,189,248,0.2);
+  }
+
+  /* ===== BACK LINK ===== */
+  a.back-btn {
+    color: #38bdf8;
+    text-decoration: none;
+    display: inline-block;
+    margin-top: 20px;
+    font-weight: 500;
+    transition: 0.3s;
+  }
+
+  a.back-btn:hover {
+    color: #60a5fa;
+    text-decoration: underline;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="product-card">
+
+
+  <h3>Add New Product</h3>
+
+  <form action="{% url 'add_product' %}" method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <div class="mb-3 text-start">
+      <label class="form-label">Select Brand</label>
+      <select name="brand" class="form-select" required>
+        <option value="" selected disabled>-- Choose Brand --</option>
+        {% for brand in brands %}
+          <option value="{{ brand.id }}">{{ brand.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-3">
+      <input type="text" name="name" class="form-control" placeholder="Product Name" required>
+    </div>
+
+    <div class="mb-3">
+      <textarea name="description" class="form-control" rows="3" placeholder="Product Description" required></textarea>
+    </div>
+
+    <div class="mb-3">
+      <input type="number" name="price" step="0.01" class="form-control" placeholder="Price (₹)" required>
+    </div>
+
+    <div class="mb-3">
+      <input type="number" name="stock" class="form-control" placeholder="Stock Quantity" min="1" required>
+    </div>
+
+    <div class="mb-3 text-start">
+      <label class="form-label">Upload Product Image</label>
+      <input type="file" name="image" class="form-control" accept="image/*" onchange="previewImage(event)">
+    </div>
+
+    <div class="preview">
+      <img id="productPreview" src="https://via.placeholder.com/150x150?text=Preview" alt="Product Preview">
+    </div>
+
+    <button type="submit" class="btn-main mt-4">Save Product</button>
+  </form>
+
+  <a href="{% url 'admin_home' %}" class="back-btn">← Back to Dashboard</a>
+</div>
+
+<script>
+  function previewImage(event) {
+    const reader = new FileReader();
+    reader.onload = function() {
+      const output = document.getElementById('productPreview');
+      output.src = reader.result;
+    };
+    reader.readAsDataURL(event.target.files[0]);
+  }
+</script>
+{% endblock %}

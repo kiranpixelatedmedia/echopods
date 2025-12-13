@@ -1,0 +1,150 @@
+{% extends 'admin_base.html' %}
+{% block title %}Edit Brand | EchoPods Admin{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ===== BRAND CARD ===== */
+  .brand-card {
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid rgba(56,189,248,0.4);
+    border-radius: 20px;
+    padding: 40px;
+    width: 100%;
+    max-width: 450px;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(56,189,248,0.15);
+    backdrop-filter: blur(10px);
+    margin: 110px auto 70px;
+    animation: fadeIn 0.8s ease;
+    transition: 0.3s;
+    size: 8vh;
+  }
+
+  .brand-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0 40px rgba(56,189,248,0.25);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  h3 {
+    color: #38bdf8;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    text-shadow: 0 0 10px rgba(56,189,248,0.4);
+  }
+
+  /* ===== IMAGE PREVIEW ===== */
+  .brand-logo {
+    width: 130px;
+    height: 130px;
+    object-fit: cover;
+    border-radius: 15px;
+    border: 2px solid rgba(56,189,248,0.5);
+    box-shadow: 0 0 20px rgba(56,189,248,0.25);
+    margin-bottom: 15px;
+    transition: transform 0.3s;
+  }
+
+  .brand-logo:hover {
+    transform: scale(1.05);
+  }
+
+  /* ===== INPUTS ===== */
+  .form-control {
+    background: rgba(241,245,249,0.95);
+    border: 1px solid rgba(56,189,248,0.4);
+    border-radius: 10px;
+    padding: 10px;
+    color: #0f172a;
+    font-weight: 500;
+    transition: all 0.3s ease;
+  }
+
+  .form-control:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 15px rgba(56,189,248,0.3);
+  }
+
+  label.form-label {
+    font-weight: 500;
+    color: #e2e8f0;
+  }
+
+  /* ===== BUTTON ===== */
+  .btn-main {
+    background: linear-gradient(90deg, #06b6d4, #3b82f6);
+    border: none;
+    padding: 12px 36px;
+    color: white;
+    font-weight: 600;
+    border-radius: 50px;
+    transition: 0.3s;
+    width: 100%;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-main:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 25px rgba(56,189,248,0.4);
+  }
+
+  /* ===== ALERT ===== */
+  .alert {
+    background: rgba(56,189,248,0.15);
+    border-color: rgba(56,189,248,0.3);
+    color: #e2e8f0;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 0 15px rgba(56,189,248,0.2);
+  }
+
+  /* ===== BACK BUTTON ===== */
+  a.back-btn {
+    color: #38bdf8;
+    text-decoration: none;
+    display: inline-block;
+    margin-top: 20px;
+    font-weight: 500;
+    transition: 0.3s;
+  }
+
+  a.back-btn:hover {
+    color: #60a5fa;
+    text-decoration: underline;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="brand-card">
+
+
+  <h3><i class="bi bi-pencil-square me-2"></i>Edit Brand</h3>
+
+  {% if brand.image %}
+    <img src="{{ brand.image.url }}" alt="{{ brand.name }}" class="brand-logo">
+    <p class="text-light small mb-3">Current Logo</p>
+  {% endif %}
+
+  <form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="mb-3">
+      <input type="text" name="name" class="form-control"
+             value="{{ brand.name }}" placeholder="Enter Brand Name" required>
+    </div>
+
+    <div class="mb-3 text-start">
+      <label class="form-label">Update Brand Logo</label>
+      <input type="file" name="image" accept="image/*" class="form-control">
+    </div>
+
+    <button type="submit" class="btn-main mt-2">Save Changes</button>
+  </form>
+
+  <a href="{% url 'show_brands' %}" class="back-btn">← Back to Brand List</a>
+</div>
+{% endblock %}

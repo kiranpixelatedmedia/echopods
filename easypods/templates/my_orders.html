@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Orders | EchoPods</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: radial-gradient(circle at top right, #0f172a, #020617);
+      color: #e2e8f0;
+      font-family: 'Poppins', sans-serif;
+      padding-top: 80px;
+    }
+    .navbar {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+    }
+    .navbar-brand {
+      color: #38bdf8 !important;
+      font-weight: 700;
+      font-size: 1.8rem;
+    }
+    .nav-link {
+      color: #f8fafc !important;
+      border-radius: 25px;
+      transition: 0.3s;
+    }
+    .nav-link:hover {
+      background: rgba(56,189,248,0.15);
+      border-color: #38bdf8;
+    }
+    .orders-container {
+      background: rgba(30, 41, 59, 0.8);
+      border-radius: 15px;
+      padding: 40px;
+      box-shadow: 0 0 40px rgba(56,189,248,0.15);
+    }
+    h2 {
+      color: #38bdf8;
+      font-weight: 700;
+      text-shadow: 0 0 10px rgba(56,189,248,0.4);
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .table {
+      color: #5085ba;
+    }
+    thead th {
+      color: #38bdf8;
+      text-transform: uppercase;
+      font-size: 0.9rem;
+    }
+    tbody tr:hover {
+      background: rgba(56,189,248,0.05);
+      transform: translateY(-2px);
+      box-shadow: 0 0 15px rgba(56,189,248,0.15);
+    }
+    td img {
+      width: 70px;
+      height: 70px;
+      border-radius: 10px;
+      object-fit: cover;
+      border: 2px solid rgba(56,189,248,0.4);
+      margin-left: 2px;
+    }
+    .product-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: center;
+      background-color: rgba(56,189,248,0.05);
+    }
+    .product-name {
+      font-weight: 600;
+      color: #000000;
+    }
+    .product-qty {
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
+
+    .navbar-toggler {
+      border: none;
+    }
+    .navbar-toggler-icon {
+      filter: invert(80%);
+    }
+
+    /* Tablet improvements */
+@media (max-width: 992px) {
+  .orders-container {
+    padding: 30px;
+  }
+  table.table {
+    font-size: 0.9rem;
+  }
+}
+
+/* Mobile: Make table scroll smoothly */
+@media (max-width: 768px) {
+  .orders-container {
+    padding: 25px;
+  }
+
+  .table-responsive {
+    border-radius: 10px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  td img {
+    width: 55px;
+    height: 55px;
+  }
+
+  .product-info {
+    gap: 6px;
+  }
+
+  .product-name {
+    font-size: 0.9rem;
+  }
+
+  .product-qty {
+    font-size: 0.75rem;
+  }
+
+  .btn-sm {
+    padding: 3px 10px;
+    font-size: 0.75rem;
+  }
+}
+
+/* Extra small phones */
+@media (max-width: 480px) {
+
+  .orders-container {
+    padding: 18px;
+  }
+
+  table.table {
+    font-size: 0.8rem;
+  }
+
+  thead th {
+    font-size: 0.75rem;
+  }
+
+  td img {
+    width: 50px;
+    height: 50px;
+  }
+
+  .product-info {
+    flex-direction: row;
+    gap: 5px;
+  }
+
+  .product-name {
+    font-size: 0.85rem;
+  }
+
+  .product-qty {
+    font-size: 0.7rem;
+  }
+}
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg fixed-top">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="{% url 'landing' %}">EchoPods</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+        <ul class="navbar-nav gap-3 align-items-center">
+          <li class="nav-item"><a class="nav-link" href="{% url 'user_home' %}">Home</a></li>
+
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="brandDropdown" data-bs-toggle="dropdown">Brands</a>
+            <ul class="dropdown-menu dropdown-menu-dark bg-dark border-info" aria-labelledby="brandDropdown">
+              {% for b in brands %}
+                <li><a class="dropdown-item text-light" href="{% url 'brand_products' b.id %}">{{ b.name }}</a></li>
+              {% empty %}
+                <li><span class="dropdown-item text-muted">No brands yet</span></li>
+              {% endfor %}
+            </ul>
+          </li>
+
+          <li class="nav-item position-relative">
+            <a class="nav-link" href="{% url 'view_cart' %}">
+              🛒 Cart
+              {% if cart_count > 0 %}
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info text-dark">
+                  {{ cart_count }}
+                </span>
+              {% endif %}
+            </a>
+          </li>
+
+          <!-- Profile -->
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" data-bs-toggle="dropdown" style="gap:8px;">
+              {% if user.image %}
+                <img src="{{ user.image.url }}" alt="Profile" class="rounded-circle border border-info" style="width:35px; height:35px; object-fit:cover;">
+              {% else %}
+                <img src="https://img.freepik.com/premium-vector/default-avatar-profile-icon-social-media-user-image-gray-avatar-icon-blank-profile-silhouette-vector-illustration_561158-3383.jpg" class="rounded-circle border border-info" style="width:35px; height:35px; object-fit:cover;">
+              {% endif %}
+              <span class="d-none d-lg-inline fw-semibold">{{ user.fname }}</span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark bg-dark border-info text-center shadow-lg">
+              <li><a class="dropdown-item text-light" href="{% url 'edit_profile' user.id %}">Edit Profile</a></li>
+              <li><a class="dropdown-item text-light" href="{% url 'my_orders' %}">My Orders</a></li>
+              <li><hr class="dropdown-divider border-info"></li>
+              <li><a class="dropdown-item text-danger fw-semibold" href="{% url 'logout_fun' %}">Logout</a></li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endfor %}
+{% endif %}
+
+  <div class="container mt-5">
+    <div class="orders-container">
+      <h2>📦 My Orders</h2>
+
+      {% if orders|length > 0 and orders.0.items.all|length > 0 %}
+      <div class="table-responsive">
+        <table class="table align-middle text-center">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Date</th>
+              <th>Price</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for order in orders %}
+              {% for item in order.items.all %}
+              <tr>
+                <td>
+                  <div class="product-info">
+                    <img src="{{ item.product.image.url }}" alt="{{ item.product.name }}">
+                    <div>
+                      <div class="product-name">{{ item.product.name }}</div>
+                      <div class="product-qty">Qty: {{ item.quantity }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>{{ order.created_at|date:"d M Y, h:i A" }}</td>
+                <td>₹{{ item.price|floatformat:2 }}</td>
+                <td><span class="badge bg-info text-dark">{{ order.status }}</span></td>
+                <td>
+                    {% if order.status == 'Pending' %}
+                        <a href="{% url 'cancel_order_item' item.id %}" class="btn btn-sm btn-outline-danger px-3">
+                        Cancel
+                        </a>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                    </td>
+              </tr>
+              {% endfor %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <p class="text-center text-secondary mt-5">You haven’t placed any orders yet 😢</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EchoPods – Feel the Future of Sound</title>
+
+  <!-- Bootstrap & Animations -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/aos@2.3.1/dist/aos.css">
+  <style>
+/* ===== GLOBAL ===== */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Fix bootstrap container overflow */
+.container, .container-fluid {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Fix row overflow caused by gap or negative margin */
+.row {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Fix AOS animation overflow issues */
+[data-aos] {
+  overflow-x: hidden;
+}
+
+body {
+  background: radial-gradient(circle at top right, #0f172a, #020617);
+  color: #e2e8f0;
+  font-family: 'Poppins', sans-serif;
+  overflow-x: hidden;
+  padding-top: 80px;
+}
+
+/* ===== NAVBAR ===== */
+.navbar {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(12px);
+}
+.navbar-brand {
+  color: #38bdf8 !important;
+  font-weight: 700;
+  font-size: 1.7rem;
+  letter-spacing: 1px;
+}
+.nav-link {
+  color: #f8fafc !important;
+  border-radius: 25px;
+  padding: 6px 16px;
+  transition: 0.3s;
+}
+.nav-link:hover {
+  border-color: #38bdf8;
+  background: rgba(56,189,248,0.15);
+  transform: translateY(-2px);
+}
+.navbar-toggler-icon {
+  filter: invert(90%);
+}
+
+/* ===== HERO SECTION ===== */
+@keyframes gradientTextMove {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.hero {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding-top: 50px;
+}
+
+.hero h2 {
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+  background: linear-gradient(270deg, #05c6e8, #0d46a1, #50bfef, #06b6d4);
+  background-size: 600% 600%;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: gradientTextMove 6s ease infinite;
+  text-shadow: 0 0 20px rgba(56,189,248,0.3);
+}
+
+.hero p {
+  color: #94a3b8;
+  margin: 1rem 0 2rem;
+  font-size: 1rem;
+}
+
+.btn-custom {
+  background: linear-gradient(90deg, #06b6d4, #3b82f6);
+  border: none;
+  padding: 12px 36px;
+  color: white;
+  font-weight: 600;
+  border-radius: 50px;
+  transition: 0.3s;
+}
+.btn-custom:hover {
+  transform: scale(1.05);
+}
+
+.product-img img {
+  width: 100%;
+  max-width: 380px;
+  border-radius: 30px;
+  animation: float 3s ease-in-out infinite;
+  filter: drop-shadow(0px 0px 25px rgba(56,189,248,0.5));
+}
+
+@keyframes float {
+  0%,100% { transform: translateY(0px); }
+  50% { transform: translateY(-15px); }
+}
+
+/* ===== FEATURES ===== */
+.features {
+  text-align: center;
+  padding: 80px 8%;
+}
+.feature-box {
+  background: rgba(44, 52, 65, 0.7);
+  padding: 30px;
+  border-radius: 15px;
+  transition: 0.3s;
+  backdrop-filter: blur(10px);
+}
+.feature-box:hover {
+  transform: translateY(-10px);
+}
+
+/* ===== ABOUT ===== */
+.about img {
+  border-radius: 20px;
+  box-shadow: 0 0 40px rgba(56,189,248,0.2);
+  width: 100%;
+  max-width: 500px;
+}
+
+/* ===== TESTIMONIALS ===== */
+.testimonial-box {
+  background: rgba(30,41,59,0.7);
+  padding: 40px;
+  border-radius: 20px;
+  margin: 20px auto;
+  max-width: 700px;
+}
+
+/* ===== FAQ ===== */
+.faq {
+  background: radial-gradient(circle at top, #293041, #1e293b);
+  padding: 80px 8%;
+  border-radius: 20px;
+}
+
+/* ===== CTA ===== */
+.cta {
+  text-align: center;
+  padding: 120px 10%;
+}
+
+/* ===== FOOTER ===== */
+footer {
+  background: #0f172a;
+  text-align: center;
+  padding: 40px 0;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+/* ===== RESPONSIVE FIXES ===== */
+
+/* Large Tablets */
+@media (max-width: 992px) {
+  .hero h2 { font-size: 2.3rem; }
+  .product-img img { max-width: 320px; }
+}
+
+/* Tablets & Phones */
+@media (max-width: 768px) {
+  .hero {
+    flex-direction: column;
+    text-align: center;
+  }
+  .hero h2 { font-size: 2rem; }
+  .btn-custom { padding: 10px 28px; }
+  .product-img img { max-width: 260px; }
+
+  /* Reduce padding for sections */
+  .features,
+  .about,
+  .faq,
+  .cta {
+    padding: 60px 5%;
+  }
+}
+
+/* Small phones */
+@media (max-width: 400px) {
+  .hero h2 { font-size: 1.7rem; }
+  .product-img img { max-width: 220px; }
+  footer { font-size: 0.7rem; }
+}
+
+/* Tablets */
+@media (max-width: 992px) {
+  .feature-box {
+    padding: 22px;
+    border-radius: 12px;
+  }
+
+  .feature-icon {
+    font-size: 1.6rem;
+  }
+
+  .testimonial-box {
+    padding: 30px;
+    max-width: 550px;
+  }
+
+  .faq .accordion-button {
+    font-size: 0.95rem;
+  }
+}
+
+/* Mobiles */
+@media (max-width: 768px) {
+  .feature-box {
+    padding: 10px;
+    margin: 0 10px;
+  }
+
+  .feature-box h5 {
+    font-size: 0.8rem;
+  }
+
+  .feature-box p {
+    font-size: 0.85rem;
+  }
+
+  .feature-icon {
+    font-size: 1.5rem;
+  }
+
+  .testimonial-box {
+    padding: 25px;
+    max-width: 420px;
+  }
+
+  .testimonial-box p {
+    font-size: 0.9rem;
+  }
+
+  .testimonial-box h6 {
+    font-size: 0.95rem;
+  }
+
+  .faq {
+    padding: 50px 5%;
+  }
+
+  .faq .accordion-button {
+    font-size: 0.9rem;
+  }
+
+  .faq .accordion-body {
+    font-size: 0.85rem;
+  }
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+  .feature-box {
+    padding: 15px;
+    margin: 0 10px;
+  }
+
+  .feature-icon {
+    font-size: 1.3rem;
+  }
+
+  .feature-box h5 {
+    font-size: 0.95rem;
+  }
+
+  .feature-box p {
+    font-size: 0.8rem;
+  }
+
+  .testimonial-box {
+    padding: 20px;
+    max-width: 340px;
+  }
+
+  .testimonial-box p {
+    font-size: 0.85rem;
+  }
+
+  .testimonial-box h6 {
+    font-size: 0.9rem;
+  }
+
+  .faq .accordion-button {
+    font-size: 0.8rem;
+  }
+}
+
+/* Tablet view */
+@media (max-width: 992px) {
+  .faq {
+    padding: 50px 6%;
+    max-width: 700px;
+    margin: auto;
+  }
+
+  .faq .accordion-item {
+    border-radius: 10px !important;
+  }
+
+  .faq .accordion-button {
+    padding: 10px 14px;
+    font-size: 0.95rem;
+  }
+
+  .faq .accordion-body {
+    padding: 10px 16px;
+    font-size: 0.9rem;
+  }
+}
+
+/* Mobile view */
+@media (max-width: 768px) {
+  .faq {
+    padding: 35px 5%;
+    max-width: 500px;
+    margin: 0 auto;
+    border-radius: 12px;
+  }
+
+  .faq .accordion-item {
+    margin-bottom: 8px;
+    border-radius: 10px !important;
+  }
+
+  .faq .accordion-button {
+    padding: 8px 12px;
+    font-size: 0.88rem;
+  }
+
+  .faq .accordion-body {
+    padding: 8px 12px;
+    font-size: 0.82rem;
+  }
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+  .faq {
+    padding: 25px 4%;
+    max-width: 90%;
+    margin: 0 auto;
+  }
+
+  .faq .accordion-button {
+    font-size: 0.8rem;
+    padding: 6px 10px;
+  }
+
+  .faq .accordion-body {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+  }
+}
+
+  </style>
+</head>
+<body>
+
+  <!-- ===== NAVBAR ===== -->
+     <!-- ===== NAVBAR ===== -->
+  <nav class="navbar navbar-expand-lg fixed-top">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">EchoPods</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+        <ul class="navbar-nav gap-2 align-items-center" >
+          <li class="nav-item"><a class="nav-link" href="{% url 'landing' %}">Home</a></li>
+          <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
+          <li class="nav-item"><a class="nav-link" href="#about">About</a></li>
+          <li class="nav-item"><a class="nav-link" href="#testimonials">Reviews</a></li>
+          <li class="nav-item"><a class="nav-link" href="#faq">FAQ</a></li>
+          <li class="nav-item"><a class="nav-link" href="#buy">Add to cart</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'signin' %}">Sign In</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'signup' %}">Sign Up</a></li>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ===== HERO ===== -->
+  <section class="hero container" data-aos="fade-up">
+    <div class="row align-items-center">
+      <div class="col-lg-6 mb-4 mb-lg-0">
+        <h2>Feel the Future of Sound</h2>
+        <p>Introducing EchoPods — the next-generation wireless earpods with noise cancellation, immersive bass, and all-day comfort.</p>
+        <button class="btn-custom">Buy Now</button>
+      </div>
+      <div class="col-lg-6 text-center">
+        <img src="https://idestiny.in/wp-content/uploads/2024/10/Airpods-pro2-6.jpg" alt="Earpods" class="img-fluid">
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FEATURES ===== -->
+  <section id="features" class="features container">
+    <h3 data-aos="fade-up">Why Choose EchoPods?</h3>
+    <div class="row g-4 justify-content-center">
+      <div class="col-md-4" data-aos="fade-right">
+        <div class="feature-box">
+          <div class="feature-icon">🎧</div>
+          <h5>Crystal Clear Audio</h5>
+          <p>Enjoy pure, studio-quality sound tuned for perfection.</p>
+        </div>
+      </div>
+      <div class="col-md-4" data-aos="fade-up">
+        <div class="feature-box">
+          <div class="feature-icon">🔋</div>
+          <h5>24h Battery Life</h5>
+          <p>Keep the rhythm going with all-day power efficiency.</p>
+        </div>
+      </div>
+      <div class="col-md-4" data-aos="fade-left">
+        <div class="feature-box">
+          <div class="feature-icon">🌊</div>
+          <h5>Water Resistant</h5>
+          <p>Built for workouts, travel, and everything in between.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ABOUT ===== -->
+  <section id="about" class="about container py-5">
+    <div class="row align-items-center">
+      <div class="col-md-6 mb-4">
+        <h4>Designed for Perfection</h4>
+        <p>EchoPods combine premium sound engineering and cutting-edge design. With adaptive noise cancellation and ergonomic fit, these redefine how music feels.</p>
+        <ul class="list-unstyled mt-3">
+          <li>✔ Adaptive Noise Cancellation</li>
+          <li>✔ Ultra-lightweight build</li>
+          <li>✔ Smart touch controls</li>
+          <li>✔ Type-C fast charging</li>
+        </ul>
+      </div>
+      <div class="col-md-6 text-center">
+        <img src="https://ipadizate.com/hero/2022/09/FcEhkIMWAAYI_iT.jpeg?width=768&aspect_ratio=16:9&format=nowebp" alt="Earpods Image" class="img-fluid">
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== TESTIMONIALS ===== -->
+  <section id="testimonials" class="testimonials text-center py-5">
+    <h3>What Our Customers Say</h3>
+    <div class="container">
+      <div class="testimonial-box mx-auto" data-aos="fade-up">
+        <p>“EchoPods completely changed how I experience music. The sound clarity and comfort are unmatched.”</p>
+        <h6>– Arjun Mehta</h6>
+      </div>
+      <div class="testimonial-box mx-auto" data-aos="fade-up">
+        <p>“The noise cancellation and deep bass make every song feel alive.”</p>
+        <h6>– Neha Sharma</h6>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FAQ ===== -->
+  <section id="faq" class="faq container">
+    <h3 class="text-center mb-4" data-aos="fade-up">Frequently Asked Questions</h3>
+    <div class="accordion" id="faqAccordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button" data-bs-toggle="collapse" data-bs-target="#collapse1">
+            Are EchoPods compatible with all devices?
+          </button>
+        </h2>
+        <div id="collapse1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+          <div class="accordion-body">Yes, EchoPods support iOS and Android devices via Bluetooth 5.3.</div>
+        </div>
+      </div>
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#collapse2">
+            Do they have fast charging?
+          </button>
+        </h2>
+        <div id="collapse2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+          <div class="accordion-body">EchoPods include Type-C fast charging with 3 hours playback in just 10 minutes.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CTA ===== -->
+  <section id="buy" class="cta">
+    <h2>Get Yours Today</h2>
+    <p>Pre-order EchoPods now and experience the sound revolution before anyone else.</p>
+     <a href="{% url 'signin' %}"><button class="btn-custom mt-3">Order Now</button></a>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer>
+    <p>© 2025 EchoPods. Designed with passion for premium audio experiences.</p>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <script>
+    AOS.init({ duration: 1000, once: true });
+  </script>
+</body>
+</html>
