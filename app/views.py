@@ -81,9 +81,16 @@ def _handle_image_upload(request, image_file, bucket_name='media'):
             return public_url
         except Exception as e:
             logger.error(f"Supabase Storage Upload failed: {e}")
-            # Fallback to local (might fail on Vercel but better than nothing)
+            # Fallback to local only if in DEBUG mode
+            if not settings.DEBUG:
+                messages.warning(request, "Image upload failed. Profile created without image.")
+                return None
             return image_file
     
+    if not settings.DEBUG:
+        # On Vercel, we can't save locally. If no supabase, we must return None.
+        messages.warning(request, "Cloud storage not configured. Profile created without image.")
+        return None
     return image_file
 
 
