@@ -27,6 +27,10 @@ ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split('
 if '.vercel.app' not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append('.vercel.app')
 
+# File Upload Settings
+MAX_UPLOAD_SIZE = 4 * 1024 * 1024  # 4MB limit for Vercel
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB request limit
+
 # Production Security Headers
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
@@ -115,7 +119,10 @@ DATABASES = {
         'PASSWORD': tmpPostgres.password,
         'HOST': tmpPostgres.hostname,
         'PORT': 5432,
-        'OPTIONS': dict(parse_qsl(tmpPostgres.query)),
+        'OPTIONS': {
+            **dict(parse_qsl(tmpPostgres.query)),
+            'conn_max_age': 600,
+        },
     }
 }
 

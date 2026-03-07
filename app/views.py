@@ -1,34 +1,108 @@
-from django.shortcuts import render, redirect,get_object_or_404
-from .models import Cart,Product,UserProfile,Brand,Order,OrderItem
-from django.contrib import messages
-from django.core.mail import send_mail
-from django.conf import settings
-from django.contrib.auth.hashers import make_password,check_password
-from django.contrib.auth import authenticate, login
-from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseForbidden
+import uuid
+import logging
 from functools import wraps
-from django.core.validators import validate_email
-from django.core.exceptions import ValidationError
+
+logger = logging.getLogger(__name__)
+
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import authenticate, login
+from django.contrib.auth.hashers import check_password, make_password
+from django.core.paginator import Paginator
+from django.db import transaction
+from django.db.models import Avg, Count, Q, Sum
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from app.supabase_client import supabase 
+
+from .models import (
+    Brand, Cart, Category, Coupon, Order, OrderItem,
+    Product, ProductReview, ProductVariant, UserProfile,
+)
+
+
+# ======================================================
+# HELPERS
+# ======================================================
+
+TAX_RATE = getattr(settings, 'TAX_RATE', 0.05)
+SHIPPING_THRESHOLD = 500
+SHIPPING_COST = 10.00
+
+
+def _get_logged_in_user(request):
+    """Returns the UserProfile for the currently logged-in session user, or None."""
+    user_id = request.session.get('user_id')
+    if user_id:
+        return UserProfile.objects.filter(id=user_id).first()
+    return None
+
+
+def _calculate_totals(cart_items):
+    """Returns (subtotal, tax, shipping, grand_total) as floats."""
+    subtotal = float(sum(item.total_price for item in cart_items))
+    tax = round(subtotal * TAX_RATE, 2)
+    shipping = 0.00 if subtotal >= SHIPPING_THRESHOLD else SHIPPING_COST
+    grand_total = round(subtotal + tax + shipping, 2)
+    return subtotal, tax, shipping, grand_total
+
+
+def _handle_image_upload(request, image_file, bucket_name='media'):
+    """
+    Validates file size and uploads to Supabase Storage if available.
+    Returns the public URL or the file object itself if cloud upload fails.
+    """
+    if not image_file:
+        return None
+
+    # 1. Validate Size
+    max_size = getattr(settings, 'MAX_UPLOAD_SIZE', 4 * 1024 * 1024)
+    if image_file.size > max_size:
+        messages.error(request, f"File too large. Maximum size is {max_size // (1024*1024)}MB.")
+        return "TOO_LARGE"
+
+    # 2. Try Supabase Storage
+    if supabase:
+        try:
+            file_name = f"{uuid.uuid4()}_{image_file.name}"
+            # Convert file to bytes
+            file_data = image_file.read()
+            
+            # Reset file pointer for potential fallback
+            image_file.seek(0)
+            
+            res = supabase.storage.from_(bucket_name).upload(
+                path=file_name,
+                file=file_data,
+                file_options={"content-type": image_file.content_type}
+            )
+            # Get public URL
+            public_url = supabase.storage.from_(bucket_name).get_public_url(file_name)
+            return public_url
+        except Exception as e:
+            logger.error(f"Supabase Storage Upload failed: {e}")
+            # Fallback to local (might fail on Vercel but better than nothing)
+            return image_file
+    
+    return image_file
+
+
+# ======================================================
+# DECORATORS
+# ======================================================
 
 def admin_required(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
-        # ✅ If user is logged in as Django superuser
         if request.user.is_authenticated and request.user.is_superuser:
             return view_func(request, *args, **kwargs)
-
-        # ✅ If logged in custom user and NOT admin — deny access
-        user_id = request.session.get('user_id')
-        if user_id:
-            user = UserProfile.objects.filter(id=user_id).first()
-            if user and getattr(user, 'is_admin', False):
-                return view_func(request, *args, **kwargs)
-
-        # 🚫 Unauthorized access
+        user = _get_logged_in_user(request)
+        if user and getattr(user, 'is_admin', False):
+            return view_func(request, *args, **kwargs)
         messages.error(request, "You are not authorized to access this page.")
         return redirect('signin')
     return wrapper
+
 
 def user_login_required(view_func):
     @wraps(view_func)
@@ -39,81 +113,50 @@ def user_login_required(view_func):
         return view_func(request, *args, **kwargs)
     return wrapper
 
-# Create your views here.
+
+# ======================================================
+# PUBLIC & AUTH VIEWS
+# ======================================================
+
 def landing(request):
     return render(request, 'landing.html')
+
+
 def signup(request):
-    return render(request, 'signup.html')
-
-def signup_fun(request):
     if request.method == 'POST':
-        fname = request.POST.get('fname').strip()
-        lname = request.POST.get('lname')
-        username = request.POST.get('uname')
-        address = request.POST.get('address')
-        age = request.POST.get('age')
-        email = request.POST.get('email')
-        phone = request.POST.get('phone')
-        password = request.POST.get('password')
-        confirmpw = request.POST.get('cpassword')
-        image = request.FILES.get('image')
+        fname    = request.POST.get('fname', '').strip()
+        lname    = request.POST.get('lname', '').strip()
+        username = request.POST.get('uname', '').strip()
+        address  = request.POST.get('address', '').strip()
+        email    = request.POST.get('email', '').strip()
+        phone    = request.POST.get('phone', '').strip()
+        password = request.POST.get('password', '')
+        confirm  = request.POST.get('cpassword', '')
+        image_file = request.FILES.get('image')
 
-        # ---------- VALIDATION SECTION ----------
-
-        # Password validation
-        if len(password) < 6:
-            messages.error(request, "Password must be at least 8 characters long!")
+        if len(password) < 6 or password != confirm:
+            messages.error(request, "Passwords must match and be at least 6 characters.")
             return redirect('signup')
 
-        if password != confirmpw:
-            messages.error(request, "Passwords do not match!")
+        # Handle Cloud Upload
+        image_result = _handle_image_upload(request, image_file)
+        if image_result == "TOO_LARGE":
             return redirect('signup')
 
-        # Duplicate checks
         if UserProfile.objects.filter(username=username).exists():
-            messages.error(request, "Username already exists!")
+            messages.error(request, "Username already taken.")
             return redirect('signup')
 
         if UserProfile.objects.filter(email=email).exists():
-            messages.error(request, "Email already registered!")
+            messages.error(request, "Email already registered.")
             return redirect('signup')
 
-        if UserProfile.objects.filter(phno=phone).exists():
-            messages.error(request, "Phone number already registered!")
-            return redirect('signup')
-
-        # Email format validation
-        if not email.endswith('.com'):
-            messages.error(request, "Email must end with '.com' extension!")
-            return redirect('signup')
-
-        # Phone validation
-        if not (phone.isdigit() and len(phone) == 10):
-            messages.error(request, "Phone number must contain exactly 10 digits!")
-            return redirect('signup')
-
-        # ---------- USER CREATION ----------
-        user = UserProfile(
-            fname=fname,
-            lname=lname,
-            address=address,
-            phno=phone,
-            username=username,
-            email=email,
-            password=make_password(password),  # (In production, use make_password)
-            image=image
+        UserProfile.objects.create(
+            fname=fname, lname=lname, address=address, phno=phone,
+            username=username, email=email,
+            password=make_password(password),
+            image=image_result, status='1',
         )
-        user.save()
-
-        # ---------- EMAIL CONFIRMATION ----------
-        subject = "Welcome to EchoPods!"
-        message = f"Hello {fname},\n\nYour registration was successful!\nYou can now log in and start exploring our products.\n\n— EchoPods Team —"
-        try:
-            send_mail(subject, message, settings.EMAIL_HOST_USER, [email])
-        except Exception as e:
-            print(f"Email send failed: {e}")  # optional debug log
-
-        # ---------- SUCCESS MESSAGE ----------
         messages.success(request, "Registration successful! Welcome to EchoPods 🎧")
         return redirect('signin')
 
@@ -121,605 +164,522 @@ def signup_fun(request):
 
 
 def signin(request):
-    return render(request, 'signin.html')
-
-
-def login_fun(request):
     if request.method == 'POST':
-        uname = request.POST.get('username')
-        password = request.POST.get('password')
-        
-        # 🔹 1. First, check if this is a Django superuser (admin login)
+        uname    = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+
+        # Django admin check
         admin_user = authenticate(username=uname, password=password)
-        if admin_user is not None and admin_user.is_superuser:
+        if admin_user and admin_user.is_superuser:
             login(request, admin_user)
-            messages.success(request, f"Welcome, {admin_user.username} (Admin) 👑")
             return redirect('admin_home')
 
-        # 🔹 2. Otherwise, check custom UserProfile model
-        user = UserProfile.objects.filter(username=uname).first() or UserProfile.objects.filter(email=uname).first()
+        # Custom user lookup (username OR email)
+        user = (
+            UserProfile.objects.filter(username=uname).first() or
+            UserProfile.objects.filter(email=uname).first()
+        )
 
-        if user:
-            # Check if password matches
-            if check_password(password, user.password):
-                # Check if admin approved the user
-                if user.status == '0':  # Pending approval
-                    messages.warning(request, "Your account is awaiting admin approval. Please try again later.")
-                    return redirect('signin')
-
-                elif user.status == '2':  # Disapproved
-                    messages.error(request, "Your account has been disapproved. Contact support for help.")
-                    return redirect('signin')
-
-                elif user.status == '1':  # Approved ✅
-                    request.session['user_id'] = user.id
-                    request.session['username'] = user.username
-                    messages.success(request, f"Welcome back, {user.fname} 👋")
-                    return redirect('user_home')
-
-            # Wrong password
-            messages.error(request, "Invalid password. Please try again.")
+        if not user:
+            messages.error(request, "No account found with that username or email.")
             return redirect('signin')
 
-        else:
-            messages.error(request, "User not found. Please check your credentials.")
+        if not check_password(password, user.password):
+            user.failed_login_attempts += 1
+            user.save(update_fields=['failed_login_attempts'])
+            messages.error(request, "Incorrect password.")
             return redirect('signin')
+
+        if user.status == '0':
+            messages.warning(request, "Your account has been disabled.")
+            return redirect('signin')
+
+        request.session['user_id'] = user.id
+        request.session['username'] = user.username
+        messages.success(request, f"Welcome back, {user.fname} 👋")
+        return redirect('admin_home' if user.is_admin else 'user_home')
 
     return render(request, 'signin.html')
-
-@admin_required
-def admin_home(request):
-    # Fetch all brands (your existing functionality)
-    brands = Brand.objects.all()
-
-    # Count users waiting for approval
-    pending_count = UserProfile.objects.filter(status='0', is_admin=False).count()
-
-    # Pass both to the template
-    return render(request, 'admin_home.html', {
-        'brands': brands,
-        'pending_count': pending_count
-    })
-
-@user_login_required
-def user_home(request):
-    user = get_object_or_404(UserProfile, id=request.session.get('user_id'))
-
-    # Restrict if user is not approved
-    if user.status != '1':
-        messages.warning(request, "Access denied. Your account is not approved yet.")
-        return redirect('signin')
-
-    brands = Brand.objects.all()
-    return render(request, 'user_home.html', {'user': user, 'brands': brands})
 
 
 def logout_fun(request):
     request.session.flush()
-    messages.success(request, "You’ve been logged out successfully.")
+    messages.success(request, "You've been logged out.")
     return redirect('signin')
+
+
+@user_login_required
+def edit_profile(request, id):
+    user = get_object_or_404(UserProfile, id=id)
+    # Prevent editing another user's profile
+    if request.session.get('user_id') != user.id:
+        return redirect('user_home')
+
+    if request.method == 'POST':
+        user.fname   = request.POST.get('fname', '').strip()
+        user.lname   = request.POST.get('lname', '').strip()
+        user.address = request.POST.get('address', '').strip()
+        user.phno    = request.POST.get('phone', '').strip()
+        
+        image_file = request.FILES.get('image')
+        if image_file:
+            image_result = _handle_image_upload(request, image_file)
+            if image_result == "TOO_LARGE":
+                return redirect('edit_profile', id=user.id)
+            user.image = image_result
+            
+        user.save()
+        messages.success(request, "Profile updated successfully! ✅")
+        return redirect('user_home')
+
+    return render(request, 'edit_profile.html', {'user': user})
+
+
+# ======================================================
+# ADMIN VIEWS
+# ======================================================
+
+@admin_required
+def admin_home(request):
+    revenue = (
+        Order.objects.filter(status__in=['Shipped', 'Delivered'])
+        .aggregate(total=Sum('grand_total'))['total'] or 0
+    )
+    return render(request, 'admin_home.html', {
+        'total_users':   UserProfile.objects.filter(is_admin=False).count(),
+        'revenue':       revenue,
+        'low_stock':     Product.objects.filter(stock__lte=5).count(),
+        'recent_orders': Order.objects.order_by('-created_at')[:5],
+        'brands':        Brand.objects.all(),
+        'pending_count': 0,
+    })
+
+
+@admin_required
+def add_product(request):
+    if request.method == 'POST':
+        name  = request.POST.get('name', '').strip()
+        brand = get_object_or_404(Brand, id=request.POST.get('brand'))
+        
+        image_file = request.FILES.get('image')
+        image_result = _handle_image_upload(request, image_file)
+        if image_result == "TOO_LARGE":
+            return redirect('add_product')
+
+        Product.objects.create(
+            brand=brand, name=name,
+            price=request.POST.get('price'),
+            stock=request.POST.get('stock'),
+            primary_image=image_result,
+        )
+        messages.success(request, f"Product '{name}' added!")
+        return redirect('show_products')
+    return render(request, 'add_product.html', {'brands': Brand.objects.all()})
+
+
+@admin_required
+def show_products(request):
+    return render(request, 'show_products.html', {
+        'products': Product.objects.select_related('brand', 'category').all()
+    })
+
+
+@admin_required
+def edit_product(request, id):
+    product = get_object_or_404(Product, id=id)
+    if request.method == 'POST':
+        product.name  = request.POST.get('name', '').strip()
+        product.price = request.POST.get('price')
+        product.stock = request.POST.get('stock')
+        product.brand = get_object_or_404(Brand, id=request.POST.get('brand'))
+        
+        image_file = request.FILES.get('image')
+        if image_file:
+            image_result = _handle_image_upload(request, image_file)
+            if image_result == "TOO_LARGE":
+                return redirect('edit_product', id=product.id)
+            product.primary_image = image_result
+
+        product.save()
+        messages.success(request, "Product updated!")
+        return redirect('show_products')
+    return render(request, 'edit_product.html', {'product': product, 'brands': Brand.objects.all()})
+
+
+@admin_required
+def delete_product(request, id):
+    get_object_or_404(Product, id=id).delete()
+    messages.success(request, "Product deleted.")
+    return redirect('show_products')
+
+
+@admin_required
+def show_brands(request):
+    return render(request, 'show_brands.html', {'brands': Brand.objects.all()})
+
 
 @admin_required
 def add_brand(request):
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
-        image = request.FILES.get('image')
-
-        # --- Validation ---
-        if not name:
-            messages.error(request, "Brand name cannot be empty!")
+        image_file = request.FILES.get('image')
+        image_result = _handle_image_upload(request, image_file)
+        if image_result == "TOO_LARGE":
             return redirect('add_brand')
 
-        # Check for duplicate (case-insensitive)
-        if Brand.objects.filter(name__iexact=name).exists():
-            messages.error(request, f"Brand '{name}' already exists!")
-            return redirect('add_brand')
-
-        # --- Save Brand ---
-        Brand.objects.create(name=name, image=image)
-        messages.success(request, f"Brand '{name}' added successfully!")
+        Brand.objects.create(
+            name=name,
+            image=image_result,
+        )
+        messages.success(request, "Brand added!")
         return redirect('show_brands')
-
     return render(request, 'add_brand.html')
+
+
 @admin_required
 def edit_brand(request, id):
     brand = get_object_or_404(Brand, id=id)
-
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-
-        # --- Validation ---
-        if not name:
-            messages.error(request, "Brand name cannot be empty!")
-            return redirect('edit_brand', id=id)
-
-        # Check if another brand already has this name
-        if Brand.objects.filter(name__iexact=name).exclude(id=brand.id).exists():
-            messages.error(request, f"Brand '{name}' already exists!")
-            return redirect('edit_brand', id=id)
-
-        brand.name = name
-
-        if 'image' in request.FILES and request.FILES['image']:
-            brand.image = request.FILES['image']
-
+        brand.name = request.POST.get('name', '').strip()
+        image_file = request.FILES.get('image')
+        if image_file:
+            image_result = _handle_image_upload(request, image_file)
+            if image_result == "TOO_LARGE":
+                return redirect('edit_brand', id=brand.id)
+            brand.image = image_result
         brand.save()
-        messages.success(request, "Brand updated successfully!")
+        messages.success(request, "Brand updated!")
         return redirect('show_brands')
-
     return render(request, 'edit_brand.html', {'brand': brand})
+
+
 @admin_required
-def add_product(request):
-    brands = Brand.objects.all()
-
-    if request.method == 'POST':
-        brand_id = request.POST.get('brand')
-        name = request.POST.get('name', '').strip()
-        description = request.POST.get('description')
-        price = request.POST.get('price')
-        stock = request.POST.get('stock')
-        image = request.FILES.get('image')
-
-        # --- Validation ---
-        if not brand_id:
-            messages.error(request, "Please select a brand.")
-            return redirect('add_product')
-
-        if not name:
-            messages.error(request, "Product name cannot be empty!")
-            return redirect('add_product')
-
-        brand = get_object_or_404(Brand, id=brand_id)
-
-        # Check duplicate name under same brand
-        if Product.objects.filter(name__iexact=name, brand=brand).exists():
-            messages.error(request, f"Product '{name}' already exists under brand '{brand.name}'!")
-            return redirect('add_product')
-
-        # --- Save Product ---
-        Product.objects.create(
-            brand=brand,
-            name=name,
-            description=description,
-            price=price,
-            stock=stock,
-            image=image
-        )
-
-        messages.success(request, f"Product '{name}' added successfully!")
-        return redirect('show_products')
-
-    return render(request, 'add_product.html', {'brands': brands})
-
 def delete_brand(request, id):
-    brand = get_object_or_404(Brand, id=id)
-    brand.delete()
-    messages.success(request, "Brand deleted successfully!")
+    get_object_or_404(Brand, id=id).delete()
+    messages.success(request, "Brand deleted.")
     return redirect('show_brands')
 
-@admin_required
-def show_products(request):
-    products  = Product.objects.all()
-    return render(request, 'show_products.html',{'products': products} )
-@admin_required
-def show_brands(request):
-    brands= Brand.objects.all()
-    return render(request, 'show_brands.html',{'brands': brands} )
-@admin_required
-def edit_product(request, id):
-    product = get_object_or_404(Product, id=id)
-    brands = Brand.objects.all()
 
-    if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        description = request.POST.get('description')
-        price = request.POST.get('price')
-        stock = request.POST.get('stock')
-        brand_id = request.POST.get('brand')
-
-        if not name:
-            messages.error(request, "Product name cannot be empty!")
-            return redirect('edit_product', id=id)
-
-        if brand_id:
-            brand = get_object_or_404(Brand, id=brand_id)
-            product.brand = brand
-
-        # Check duplicate product under same brand
-        if Product.objects.filter(name__iexact=name, brand=product.brand).exclude(id=product.id).exists():
-            messages.error(request, f"Product '{name}' already exists under brand '{product.brand.name}'!")
-            return redirect('edit_product', id=id)
-
-        # Update fields
-        product.name = name
-        product.description = description
-        product.price = price
-        product.stock = stock
-
-        if 'image' in request.FILES and request.FILES['image']:
-            product.image = request.FILES['image']
-
-        product.save()
-        messages.success(request, "Product updated successfully!")
-        return redirect('show_products')
-
-    return render(request, 'edit_product.html', {'product': product, 'brands': brands})
-
-def delete_product(request, id):
-    product = get_object_or_404(Product, id=id)
-    product.delete()
-    messages.success(request, "Product deleted successfully!")
-    return redirect('show_products')
 @admin_required
 def approval_page(request):
-    # Show all non-admin users (pending/approved/disapproved)
-    users = UserProfile.objects.filter(is_admin=False)
-    return render(request, 'approval_page.html', {'users': users})
+    return render(request, 'approval_page.html', {
+        'users': UserProfile.objects.filter(is_admin=False)
+    })
 
+
+@admin_required
 def approve_user(request, id):
     user = get_object_or_404(UserProfile, id=id)
-
-    if user.status != '1':
-        user.status = '1'
-        user.save()
-
-        # Send approval notification email (no password shared)
-        subject = "Your EchoPods Account Has Been Approved 🎉"
-        message = (
-            f"Hi {user.username},\n\n"
-            "Good news! Your account has been approved by the EchoPods Admin Team.\n\n"
-            "You can now log in using your registered credentials and start exploring our platform.\n\n"
-            "Thank you for joining EchoPods!\n\n"
-            "Best regards,\n"
-            "EchoPods Team"
-        )
-
-        send_mail(subject, message, settings.EMAIL_HOST_USER, [user.email])
-
-        messages.success(request, f"User '{user.username}' approved successfully and notified via email.")
-    else:
-        messages.info(request, f"User '{user.username}' is already approved.")
-
+    user.status = '1'
+    user.save()
+    messages.success(request, "User approved.")
     return redirect('approval_page')
 
 
+@admin_required
 def disapprove_user(request, id):
     user = get_object_or_404(UserProfile, id=id)
-    user.status = '2'
+    user.status = '0'
     user.save()
-    messages.warning(request, f"User '{user.username}' disapproved.")
+    messages.warning(request, "User disabled.")
     return redirect('approval_page')
 
-def view_users(request):
-    """Display all non-admin users."""
-    users = UserProfile.objects.filter(is_admin=False)
-    return render(request, 'view_users.html', {'users': users})
 
+@admin_required
+def view_users(request):
+    return render(request, 'view_users.html', {
+        'users': UserProfile.objects.filter(is_admin=False)
+    })
+
+
+@admin_required
 def delete_user(request, id):
-    """Delete a user by ID."""
-    user = get_object_or_404(UserProfile, id=id)
-    username = user.username
-    user.delete()
-    messages.success(request, f"User '{username}' deleted successfully!")
+    get_object_or_404(UserProfile, id=id).delete()
+    messages.success(request, "User deleted.")
     return redirect('view_users')
+
+
+# ======================================================
+# CUSTOMER STOREFRONT
+# ======================================================
+
+@user_login_required
+def user_home(request):
+    user = get_object_or_404(UserProfile, id=request.session['user_id'])
+    return render(request, 'user_home.html', {'user': user, 'brands': Brand.objects.all()})
+
 
 @user_login_required
 def brand_products(request, brand_id):
     brand = get_object_or_404(Brand, id=brand_id)
-    products = Product.objects.filter(brand=brand)
-
-    # Pass user for profile image display
-    user = None
-    if request.session.get('user_id'):
-        user = get_object_or_404(UserProfile, id=request.session['user_id'])
-
+    user  = get_object_or_404(UserProfile, id=request.session['user_id'])
+    products = Product.objects.filter(brand=brand, is_active=True).prefetch_related('variants')
     return render(request, 'brand_products.html', {
-        'brand': brand,
-        'products': products,
-        'user': user,
-        'brands': Brand.objects.all(),  # So navbar still works dynamically
+        'brand': brand, 'products': products,
+        'user': user, 'brands': Brand.objects.all(),
     })
+
+
+# ======================================================
+# CART
+# ======================================================
+
 @user_login_required
 def add_to_cart(request, product_id):
-    if not request.session.get('user_id'):
-        messages.error(request, "Please log in to add items to your cart.")
-        return redirect('signin')
-
-    user = get_object_or_404(UserProfile, id=request.session['user_id'])
+    user    = get_object_or_404(UserProfile, id=request.session['user_id'])
     product = get_object_or_404(Product, id=product_id)
+    qty     = int(request.POST.get('quantity', 1))
 
-    quantity = int(request.POST.get('quantity', 1))
-
-    # Check if enough stock is available
-    if product.stock < quantity:
-        messages.error(request, f"Only {product.stock} unit(s) of '{product.name}' available.")
-        return redirect('brand_products', brand_id=product.brand.id)
-
-    # Get or create the cart item
     cart_item, created = Cart.objects.get_or_create(user=user, product=product)
-    if not created:
-        # Adding more to existing cart item
-        if product.stock < (cart_item.quantity + quantity):
-            messages.warning(request, f"Cannot add more — only {product.stock} left in stock.")
-            return redirect('brand_products', brand_id=product.brand.id)
-        cart_item.quantity += quantity
-        messages.info(request, f"Updated quantity of '{product.name}' in your cart.")
-    else:
-        cart_item.quantity = quantity
-        messages.success(request, f"'{product.name}' added to your cart!")
-
+    cart_item.quantity = cart_item.quantity + qty if not created else qty
     cart_item.save()
 
-    # Reduce stock
-    product.stock -= quantity
-    product.save()
-
+    messages.success(request, f"'{product.name}' added to cart!")
     return redirect('view_cart')
+
 
 @user_login_required
 def view_cart(request):
-    if not request.session.get('user_id'):
-        return redirect('signin')
-
-    user = get_object_or_404(UserProfile, id=request.session['user_id'])
-    cart_items = Cart.objects.filter(user=user)
-    total_price = sum(item.total_price for item in cart_items)
-    cart_count = cart_items.count()  # ✅ Add this for navbar badge
-
-    if request.method == "POST":
-        for item in cart_items:
-            new_qty = int(request.POST.get(f'quantity_{item.id}', item.quantity))
-
-            # Restore stock difference
-            if new_qty < item.quantity:
-                product = item.product
-                product.stock += (item.quantity - new_qty)
-                product.save()
-            elif new_qty > item.quantity:
-                product = item.product
-                if product.stock < (new_qty - item.quantity):
-                    messages.error(request, f"Not enough stock for '{product.name}'.")
-                    continue
-                product.stock -= (new_qty - item.quantity)
-                product.save()
-
-            if new_qty <= 0:
-                # Restore stock if removed
-                item.product.stock += item.quantity
-                item.product.save()
-                item.delete()
-            else:
-                item.quantity = new_qty
-                item.save()
-
-        messages.success(request, "Cart updated successfully!")
-        return redirect('view_cart')
+    user       = get_object_or_404(UserProfile, id=request.session['user_id'])
+    cart_items = Cart.objects.select_related('product').filter(user=user)
+    total      = sum(item.total_price for item in cart_items)
 
     return render(request, 'view_cart.html', {
-        'user': user,            # ✅ Add this line
-        'brands': Brand.objects.all(),  # ✅ For dropdown
-        'cart_items': cart_items,
-        'total_price': total_price,
-        'cart_count': cart_count, # ✅ Badge count
+        'user': user, 'brands': Brand.objects.all(),
+        'cart_items': cart_items, 'total_price': total,
+        'cart_count': cart_items.count(),
     })
 
-
-def remove_cart_item(request, item_id):
-    item = get_object_or_404(Cart,id=item_id)
-    item.delete()
-    messages.info(request, f"Removed '{item.product.name}' from your cart.")
-    return redirect('view_cart')
 
 @user_login_required
-def edit_profile(request, id):
-    user = get_object_or_404(UserProfile, id=id)
+def remove_cart_item(request, item_id):
+    get_object_or_404(Cart, id=item_id).delete()
+    return redirect('view_cart')
 
-    # 🔒 Prevent editing others' profiles
-    if request.session.get('user_id') != user.id:
-        messages.error(request, "Unauthorized access.")
-        return redirect('user_home')
 
-    if request.method == 'POST':
-        fname = request.POST.get('fname', '').strip()
-        lname = request.POST.get('lname', '').strip()
-        address = request.POST.get('address', '').strip()
-        username = request.POST.get('uname', '').strip()
-        email = request.POST.get('email', '').strip()
-        phone = request.POST.get('phone', '').strip()
-        image = request.FILES.get('image')
+def update_cart_quantity(request):
+    """AJAX endpoint — update quantity of a single cart item."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid request'}, status=400)
 
-        # ========== VALIDATION SECTION ==========
+    cart_item = get_object_or_404(Cart, id=request.POST.get('cart_id'))
+    new_qty   = int(request.POST.get('quantity', 0))
 
-        # 1️⃣ Required field check
-        if not all([fname, lname, address, username, email, phone]):
-            messages.error(request, "All fields are required.")
-            return redirect('edit_profile', id=user.id)
+    if new_qty <= 0:
+        cart_item.delete()
+        return JsonResponse({'removed': True})
 
-        # 2️⃣ Username validation
-        if len(username) < 3:
-            messages.error(request, "Username must be at least 3 characters long.")
-            return redirect('edit_profile', id=user.id)
+    cart_item.quantity = new_qty
+    cart_item.save()
+    total = float(sum(item.total_price for item in Cart.objects.filter(user=cart_item.user)))
+    return JsonResponse({'removed': False, 'item_total': float(cart_item.total_price), 'total_price': total})
 
-        if " " in username:
-            messages.error(request, "Username cannot contain spaces.")
-            return redirect('edit_profile', id=user.id)
 
-        # 🚫 Check for existing username (excluding current user)
-        if UserProfile.objects.filter(username=username).exclude(id=user.id).exists():
-            messages.error(request, f"The username '{username}' is already taken. Please choose another.")
-            return redirect('edit_profile', id=user.id)
+# ======================================================
+# CHECKOUT & MOCK PAYMENT
+# ======================================================
 
-        # 3️⃣ Email validation
-        try:
-            validate_email(email)
-        except ValidationError:
-            messages.error(request, "Enter a valid email address (must include .com).")
-            return redirect('edit_profile', id=user.id)
+@user_login_required
+def checkout_order(request):
+    """Step 1 — Validate cart, show mock payment page. Stock NOT deducted yet."""
+    if request.method != 'POST':
+        return redirect('view_cart')
 
-        if not email.endswith('.com'):
-            messages.error(request, "Email must end with '.com'.")
-            return redirect('edit_profile', id=user.id)
+    user         = get_object_or_404(UserProfile, id=request.session['user_id'])
+    selected_ids = request.POST.getlist('selected_items')
+    cart_items   = Cart.objects.select_related('product').filter(user=user, id__in=selected_ids)
 
-        # 🚫 Check if email already exists (excluding current user)
-        if UserProfile.objects.filter(email=email).exclude(id=user.id).exists():
-            messages.error(request, "This email is already registered with another account.")
-            return redirect('edit_profile', id=user.id)
+    if not cart_items.exists():
+        messages.warning(request, "No items selected for checkout.")
+        return redirect('view_cart')
 
-        # 4️⃣ Phone validation
-        if not (phone.isdigit() and len(phone) == 10):
-            messages.error(request, "Phone number must contain exactly 10 digits.")
-            return redirect('edit_profile', id=user.id)
+    # Stock validation
+    for item in cart_items:
+        if item.product.stock < item.quantity:
+            messages.error(request, f"Not enough stock for {item.product.name}. Only {item.product.stock} left.")
+            return redirect('view_cart')
 
-        if UserProfile.objects.filter(phno=phone).exclude(id=user.id).exists():
-            messages.error(request, "This phone number is already in use.")
-            return redirect('edit_profile', id=user.id)
+    subtotal, tax, shipping, grand_total = _calculate_totals(cart_items)
+    request.session['pending_checkout_items'] = selected_ids
 
-        # ========== SAVE UPDATED DATA ==========
-        user.fname = fname
-        user.lname = lname
-        user.address = address
-        user.username = username
-        user.email = email
-        user.phno = phone
-
-        if image:
-            user.image = image
-
-        user.save()
-
-        messages.success(request, "Profile updated successfully! ✅")
-        return redirect('user_home')
-
-    # For GET request — show form with existing user data
-    return render(request, 'edit_profile.html', {
-        'user': user,
-        'brands': Brand.objects.all(),
-        'cart_count': Cart.objects.filter(user=user).count(),
+    return render(request, 'mock_payment.html', {
+        'user': user, 'brands': Brand.objects.all(),
+        'selected_ids': selected_ids,
+        'total_price': subtotal,
+        'tax': tax, 'shipping': shipping, 'grand_total': grand_total,
     })
 
-from django.db import transaction
 
 @user_login_required
 @transaction.atomic
-def checkout_order(request):
-    if not request.session.get('user_id'):
-        return redirect('signin')
+def process_payment(request):
+    """Step 2 — User paid. Create order, deduct stock, clear cart."""
+    if request.method != 'POST':
+        return redirect('view_cart')
 
-    user = get_object_or_404(UserProfile, id=request.session['user_id'])
+    user         = get_object_or_404(UserProfile, id=request.session['user_id'])
+    selected_ids = request.session.pop('pending_checkout_items', None)
 
-    if request.method == "POST":
-        selected_ids = request.POST.getlist('selected_items')
+    if not selected_ids:
+        messages.error(request, "Checkout session expired. Please try again.")
+        return redirect('view_cart')
 
-        if not selected_ids:
-            messages.warning(request, "No items selected for checkout!")
+    cart_items = Cart.objects.select_related('product').filter(user=user, id__in=selected_ids)
+
+    if not cart_items.exists():
+        messages.warning(request, "Cart items not found.")
+        return redirect('view_cart')
+
+    # Final stock validation (race condition guard)
+    for item in cart_items:
+        if item.product.stock < item.quantity:
+            messages.error(request, f"Sorry, '{item.product.name}' just went out of stock!")
             return redirect('view_cart')
 
-        cart_items = Cart.objects.filter(user=user, id__in=selected_ids)
-        if not cart_items.exists():
-            messages.warning(request, "Selected items not found!")
-            return redirect('view_cart')
+    subtotal, tax, shipping, grand_total = _calculate_totals(cart_items)
 
-        total_price = sum(item.total_price for item in cart_items)
-
-        order = Order.objects.create(user=user, total_amount=total_price, status='Pending')
-
-        for item in cart_items:
-            OrderItem.objects.create(
-                order=order,
-                product=item.product,
-                quantity=item.quantity,
-                price=item.product.price
-            )
-            item.product.stock -= item.quantity
-            item.product.save()
-
-        cart_items.delete()
-        messages.success(request, "Selected items have been ordered successfully!")
-        return redirect('my_orders')
-
-    return redirect('view_cart')
-
-
-
-def my_orders(request):
-    if not request.session.get('user_id'):
-        return redirect('signin')
-
-    user = get_object_or_404(UserProfile, id=request.session['user_id'])
-    orders = (
-        Order.objects.filter(user=user)
-        .prefetch_related('items__product')  # ✅ use related_name 'items'
-        .order_by('-created_at')
+    order = Order.objects.create(
+        user=user, total_amount=subtotal, tax_amount=tax,
+        shipping_cost=shipping, grand_total=grand_total,
+        status='Pending', payment_status='Paid',
     )
 
-    return render(request, 'my_orders.html', {
-        'user': user,
-        'orders': orders,
-        'brands': Brand.objects.all(),
-        'cart_count': Cart.objects.filter(user=user).count(),
-    })
+    for item in cart_items:
+        OrderItem.objects.create(
+            order=order, product=item.product,
+            quantity=item.quantity,
+            price_at_purchase=item.product.discount_price or item.product.price,
+        )
+        item.product.stock = max(0, item.product.stock - item.quantity)
+        if item.product.stock == 0:
+            item.product.is_active = False
+        item.product.save(update_fields=['stock', 'is_active'])
 
-from django.http import JsonResponse
+    cart_items.delete()
+    messages.success(request, f"Payment successful! Order #{order.id} placed. 🎉")
+    return redirect('my_orders')
 
-def update_cart_quantity(request):
-    if request.method == "POST":
-        cart_id = request.POST.get('cart_id')
-        new_qty = int(request.POST.get('quantity'))
 
-        cart_item = get_object_or_404(Cart, id=cart_id)
-        product = cart_item.product
+@user_login_required
+def my_orders(request):
+    user   = get_object_or_404(UserProfile, id=request.session['user_id'])
+    orders = Order.objects.filter(user=user).prefetch_related('items__product').order_by('-created_at')
+    return render(request, 'my_orders.html', {'user': user, 'orders': orders, 'brands': Brand.objects.all()})
 
-        # Handle quantity 0 → remove item
-        if new_qty <= 0:
-            product.stock += cart_item.quantity  # Restore stock
-            product.save()
-            cart_item.delete()
-            return JsonResponse({'removed': True})
 
-        # Handle stock limits
-        if new_qty > product.stock:
-            return JsonResponse({'error': f"Only {product.stock} items available."})
-
-        # Adjust stock
-        stock_diff = new_qty - cart_item.quantity
-        product.stock -= stock_diff
-        product.save()
-
-        # Update cart quantity
-        cart_item.quantity = new_qty
-        cart_item.save()
-
-        # Calculate updated totals
-        total_price = sum(item.total_price for item in Cart.objects.filter(user=cart_item.user))
-        item_total = cart_item.product.price * cart_item.quantity
-
-        return JsonResponse({
-            'removed': False,
-            'item_total': item_total,
-            'total_price': total_price
-        })
-
-    return JsonResponse({'error': 'Invalid request'}, status=400)
+@user_login_required
 def cancel_order_item(request, item_id):
     item = get_object_or_404(OrderItem, id=item_id)
 
-    # Only allow cancelling if status is still Pending
+    if item.order.user.id != request.session.get('user_id'):
+        messages.error(request, "Unauthorized.")
+        return redirect('my_orders')
+
     if item.order.status != 'Pending':
         messages.error(request, "You can only cancel pending orders.")
         return redirect('my_orders')
 
-    # Restore stock to product
-    product = item.product
-    product.stock += item.quantity
-    product.save()
-
-    # Delete item from order
+    # Restore stock
+    item.product.stock += item.quantity
+    item.product.is_active = True
+    item.product.save(update_fields=['stock', 'is_active'])
     item.delete()
 
-    # If all items removed, mark order as cancelled
+    # Cancel whole order if no items left
     if not item.order.items.exists():
         item.order.status = 'Cancelled'
-        item.order.save()
+        item.order.save(update_fields=['status'])
 
-    messages.success(request, "Order item cancelled successfully.")
+    messages.success(request, "Item cancelled and stock restored.")
     return redirect('my_orders')
+
+
+# ======================================================
+# STORE, SEARCH & PRODUCT DETAIL
+# ======================================================
+
+def search_products(request):
+    query       = request.GET.get('q', '')
+    brand_id    = request.GET.get('brand')
+    category_id = request.GET.get('category')
+    min_price   = request.GET.get('min_price')
+    max_price   = request.GET.get('max_price')
+    sort_by     = request.GET.get('sort', 'newest')
+
+    products = (
+        Product.objects
+        .filter(is_active=True)
+        .annotate(avg_rating=Avg('reviews__rating'), review_count=Count('reviews'))
+        .prefetch_related('variants')
+    )
+
+    if query:
+        products = products.filter(
+            Q(name__icontains=query) |
+            Q(description__icontains=query) |
+            Q(brand__name__icontains=query)
+        )
+    if brand_id:
+        products = products.filter(brand_id=brand_id)
+    if category_id:
+        products = products.filter(category_id=category_id)
+    if min_price:
+        products = products.filter(price__gte=min_price)
+    if max_price:
+        products = products.filter(price__lte=max_price)
+
+    sort_map = {'price_low': 'price', 'price_high': '-price', 'newest': '-created_at'}
+    products = products.order_by(sort_map.get(sort_by, '-created_at'))
+
+    page_obj = Paginator(products, 12).get_page(request.GET.get('page'))
+
+    return render(request, 'store.html', {
+        'page_obj':        page_obj,
+        'user':            _get_logged_in_user(request),
+        'current_q':       query,
+        'current_brand':   brand_id,
+        'current_category': category_id,
+        'current_min':     min_price,
+        'current_max':     max_price,
+        'current_sort':    sort_by,
+    })
+
+
+def product_detail(request, id):
+    product    = get_object_or_404(Product.objects.prefetch_related('reviews__user'), id=id)
+    reviews    = product.reviews.order_by('-created_at')
+    avg_rating = round(reviews.aggregate(avg=Avg('rating'))['avg'] or 0, 1)
+    user       = _get_logged_in_user(request)
+
+    if request.method == 'POST' and user:
+        comment = request.POST.get('comment', '').strip()
+        rating  = int(request.POST.get('rating', 5))
+        if ProductReview.objects.filter(product=product, user=user).exists():
+            messages.warning(request, "You have already reviewed this product.")
+        else:
+            ProductReview.objects.create(product=product, user=user, rating=rating, comment=comment)
+            messages.success(request, "Thank you for your review! ⭐")
+            return redirect('product_detail', id=product.id)
+
+    return render(request, 'product_detail.html', {
+        'product':    product,
+        'reviews':    reviews,
+        'avg_rating': avg_rating,
+        'user':       user,
+        'brands':     Brand.objects.all(),
+    })
+
+
+# ======================================================
+# CUSTOM ERROR HANDLERS
+# ======================================================
+
+def custom_403(request, exception=None):
+    return render(request, '403.html', status=403)
+
+def custom_404(request, exception):
+    return render(request, '404.html', status=404)
+
+
+def custom_500(request):
+    return render(request, '500.html', status=500)
