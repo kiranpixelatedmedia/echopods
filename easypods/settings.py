@@ -22,6 +22,7 @@ if not SECRET_KEY:
     raise ValueError("DJANGO_SECRET_KEY is not set. Create a .env file.")
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
+IS_VERCEL = os.getenv('VERCEL') == '1'
 
 ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
 if '.vercel.app' not in ALLOWED_HOSTS:
