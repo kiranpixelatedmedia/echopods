@@ -119,10 +119,8 @@ DATABASES = {
         'PASSWORD': tmpPostgres.password,
         'HOST': tmpPostgres.hostname,
         'PORT': 5432,
-        'OPTIONS': {
-            **dict(parse_qsl(tmpPostgres.query)),
-            'conn_max_age': 600,
-        },
+        'CONN_MAX_AGE': 600,
+        'OPTIONS': dict(parse_qsl(tmpPostgres.query)),
     }
 }
 
